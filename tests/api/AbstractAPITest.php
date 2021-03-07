@@ -199,5 +199,6 @@ abstract class AbstractAPITest extends TestCase {
 			$note->$key = $val;
 		}
 		$this->checkReferenceNote($note, $responseNote, 'Updated note');
+		return $responseNote;
 	}
 }

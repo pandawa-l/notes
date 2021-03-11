@@ -5,6 +5,27 @@
 			class="note-container"
 			:class="{ fullscreen: fullscreen }"
 		>
+			<Modal v-if="note.conflict && showConflict" size="full" @close="showConflict=false">
+				<div class="conflict-modal">
+					<div class="conflict-header">
+						{{ t('notes', 'The note has been changed in another session. Please choose which content should be saved.') }}
+					</div>
+					<div class="conflict-solutions">
+						<ConflictSolution
+							:content="note.conflict.content"
+							:reference="note.reference.content"
+							:button="t('notes', 'Use version from server')"
+							@onChooseSolution="onUseRemoteVersion"
+						/>
+						<ConflictSolution
+							:content="note.content"
+							:reference="note.reference.content"
+							:button="t('notes', 'Use current version')"
+							@onChooseSolution="onUseLocalVersion"
+						/>
+					</div>
+				</div>
+			</Modal>
 			<div class="note-editor">
 				<div v-show="!note.content" class="placeholder">
 					{{ preview ? t('notes', 'Empty note') : t('notes', 'Write …') }}
@@ -40,6 +61,11 @@
 					class="action-error icon-error-color"
 					@click="onManualSave"
 				/>
+				<button v-show="note.conflict"
+					v-tooltip.right="t('notes', 'Update conflict. Click for resolving manually.')"
+					class="action-error icon-error-color"
+					@click="showConflict=true"
+				/>
 			</span>
 		</div>
 	</AppContent>
@@ -50,6 +76,7 @@ import {
 	Actions,
 	ActionButton,
 	AppContent,
+	Modal,
 	Tooltip,
 	isMobile,
 } from '@nextcloud/vue'
@@ -57,9 +84,10 @@ import { showError } from '@nextcloud/dialogs'
 import { emit } from '@nextcloud/event-bus'
 
 import { config } from '../config'
-import { fetchNote, refreshNote, saveNote, saveNoteManually, autotitleNote, routeIsNewNote } from '../NotesService'
+import { fetchNote, refreshNote, saveNote, saveNoteManually, autotitleNote, routeIsNewNote, conflictSolutionLocal, conflictSolutionRemote } from '../NotesService'
 import TheEditor from './EditorEasyMDE'
 import ThePreview from './EditorMarkdownIt'
+import ConflictSolution from './ConflictSolution'
 import store from '../store'
 
 export default {
@@ -69,6 +97,8 @@ export default {
 		Actions,
 		ActionButton,
 		AppContent,
+		ConflictSolution,
+		Modal,
 		TheEditor,
 		ThePreview,
 	},
@@ -96,6 +126,7 @@ export default {
 			autotitleTimer: null,
 			refreshTimer: null,
 			etag: null,
+			showConflict: false,
 		}
 	},
 
@@ -124,6 +155,11 @@ export default {
 			}
 		},
 		title: 'onUpdateTitle',
+		'note.conflict'(newConflict, oldConflict) {
+			if (newConflict) {
+				this.showConflict = true
+			}
+		},
 	},
 
 	created() {
@@ -242,7 +278,7 @@ export default {
 		},
 
 		refreshNote() {
-			if (this.note.unsaved) {
+			if (this.note.unsaved && !this.note.conflict) {
 				this.startRefreshTimer()
 				return
 			}
@@ -317,6 +353,16 @@ export default {
 			store.commit('updateNote', note)
 			saveNoteManually(this.note.id)
 		},
+
+		onUseLocalVersion() {
+			conflictSolutionLocal(this.note)
+			this.showConflict = false
+		},
+
+		onUseRemoteVersion() {
+			conflictSolutionRemote(this.note)
+			this.showConflict = false
+		},
 	},
 }
 </script>
@@ -390,4 +436,27 @@ export default {
 .action-buttons button {
 	padding: 15px;
 }
+
+/* Conflict Modal */
+.conflict-modal {
+	width: 70vw;
+}
+
+.conflict-header {
+	padding: 1ex 1em;
+}
+
+.conflict-solutions {
+	display: flex;
+	flex-direction: row-reverse;
+	max-height: 75vh;
+	overflow-y: auto;
+}
+
+@media (max-width: 60em) {
+	.conflict-solutions {
+		flex-direction: column;
+	}
+}
+
 </style>
